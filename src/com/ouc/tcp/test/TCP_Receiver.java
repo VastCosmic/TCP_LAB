@@ -1,74 +1,56 @@
-/***************************2.1: ACK/NACK*****************/
-/***** Feng Hong; 2015-12-09******************************/
 package com.ouc.tcp.test;
+
+import com.ouc.tcp.client.TCP_Receiver_ADT;
+import com.ouc.tcp.message.TCP_PACKET;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 
-import com.ouc.tcp.client.TCP_Receiver_ADT;
-import com.ouc.tcp.message.*;
-import com.ouc.tcp.tool.TCP_TOOL;
-
 public class TCP_Receiver extends TCP_Receiver_ADT {
-	
-	private TCP_PACKET ackPack;	//回复的ACK报文段
-	int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
-
-	// 记录上一次接收到的包序号
-	int last_sequence = -1;
+	int expSequence = 0;  //记录期望收到的序号
 
 	/*构造函数*/
 	public TCP_Receiver() {
-		super();	//调用超类构造函数
-		super.initTCP_Receiver(this);	//初始化TCP接收端
+		super();    //调用超类构造函数
+		super.initTCP_Receiver(this);    //初始化TCP接收端
 	}
 
 	@Override
 	//接收到数据报：检查校验和，设置回复的ACK报文段
 	public void rdt_recv(TCP_PACKET recvPack) {
 		//检查校验码，生成ACK
-		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
-			// 当前接收到的包seq
-			int current_sequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;
-			// 如果当前接收到的包序号与上一次接收到的包序号相同，则说明是重复包，不需要交付
-			if(current_sequence != this.last_sequence) {
-				// 更新接收到的包序号
-				this.last_sequence = current_sequence;
-				// 将接收到的正确有序的数据插入data队列，准备交付
-				this.dataQueue.add(recvPack.getTcpS().getData());
-				// 更新下一个待接收的包序号
-				sequence++;
-			}
+		if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+			// 当前包的seq
+			int currentSequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;
+            //回复的ACK报文段
+            TCP_PACKET ackPack;
+            if (expSequence == currentSequence) {  // 当前收到的包的序号是期望的序号
+				//生成ACK报文段，ack为收到的TCP分组的seq
+				tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+				ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+				tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 
-			//生成ACK报文段（设置确认号）
-			tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			reply(ackPack);			
-			
-			//将接收到的正确有序的数据插入data队列，准备交付
-			dataQueue.add(recvPack.getTcpS().getData());				
-			sequence++;
-		}else{
-			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
-			System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
-			System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
-			tcpH.setTh_ack(last_sequence * 100 + 1); //设置ack为上一次的包序号
-			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			reply(ackPack);
+				reply(ackPack);
+
+				dataQueue.add(recvPack.getTcpS().getData());
+				expSequence += 1;  // 更新期望收到的包的seq
+			} else {
+				tcpH.setTh_ack((expSequence - 1) * 100 + 1);  // 设置确认号为已确认的最大序号
+				ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+				tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+
+				reply(ackPack);
+			}
 		}
-		
+
 		System.out.println();
-		
-		
+
+
 		//交付数据（每20组数据交付一次）
-		if(dataQueue.size() == 20) 
-			deliver_data();	
+		if (dataQueue.size() == 20)
+			deliver_data();
 	}
 
 	@Override
@@ -77,26 +59,24 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 		//检查dataQueue，将数据写入文件
 		File fw = new File("recvData.txt");
 		BufferedWriter writer;
-		
+
 		try {
 			writer = new BufferedWriter(new FileWriter(fw, true));
-			
+
 			//循环检查data队列中是否有新交付数据
-			while(!dataQueue.isEmpty()) {
+			while (!dataQueue.isEmpty()) {
 				int[] data = dataQueue.poll();
-				
+
 				//将数据写入文件
-				for(int i = 0; i < data.length; i++) {
-					writer.write(data[i] + "\n");
-				}
-				
-				writer.flush();		//清空输出缓存
+                for (int datum : data) {
+                    writer.write(datum + "\n");
+                }
+
+				writer.flush();        //清空输出缓存
 			}
 			writer.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-
-			e.printStackTrace();
+			System.out.println("Error at deliver_data(): " + e);
 		}
 	}
 
@@ -104,10 +84,8 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)4);	//eFlag=0，信道无错误
-				
+		tcpH.setTh_eflag((byte) 7);
 		//发送数据报
 		client.send(replyPack);
 	}
-	
 }
