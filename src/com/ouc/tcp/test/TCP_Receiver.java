@@ -56,7 +56,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
 			System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
 			System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
-			tcpH.setTh_ack(-1);
+			tcpH.setTh_ack(last_sequence * 100 + 1); //设置ack为上一次的包序号
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 			//回复ACK报文段

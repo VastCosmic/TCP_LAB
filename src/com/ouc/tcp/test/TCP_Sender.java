@@ -61,7 +61,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			// System.out.println("CurrentAck: "+currentAck);
 
 			// N ACK
-			if (currentAck == -1){
+			if (currentAck != tcpPack.getTcpH().getTh_seq()){
 				// 重新发送，保持waitACK状态
 				System.out.println("NACK: "+tcpPack.getTcpH().getTh_seq());
 				udt_send(tcpPack);
