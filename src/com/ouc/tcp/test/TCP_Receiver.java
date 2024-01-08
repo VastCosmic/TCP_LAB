@@ -15,7 +15,10 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	
 	private TCP_PACKET ackPack;	//回复的ACK报文段
 	int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
-		
+
+	// 记录上一次接收到的包序号
+	int last_sequence = -1;
+
 	/*构造函数*/
 	public TCP_Receiver() {
 		super();	//调用超类构造函数
@@ -27,6 +30,18 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	public void rdt_recv(TCP_PACKET recvPack) {
 		//检查校验码，生成ACK
 		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+			// 当前接收到的包seq
+			int current_sequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;
+			// 如果当前接收到的包序号与上一次接收到的包序号相同，则说明是重复包，不需要交付
+			if(current_sequence != this.last_sequence) {
+				// 更新接收到的包序号
+				this.last_sequence = current_sequence;
+				// 将接收到的正确有序的数据插入data队列，准备交付
+				this.dataQueue.add(recvPack.getTcpS().getData());
+				// 更新下一个待接收的包序号
+				sequence++;
+			}
+
 			//生成ACK报文段（设置确认号）
 			tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
@@ -80,6 +95,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			writer.close();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
+
 			e.printStackTrace();
 		}
 	}
@@ -88,7 +104,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)0);	//eFlag=0，信道无错误
+		tcpH.setTh_eflag((byte)1);	//eFlag=0，信道无错误
 				
 		//发送数据报
 		client.send(replyPack);
